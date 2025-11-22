@@ -72,7 +72,7 @@
                 sudo chown $USER /opt/micromamba
             fi
 
-            if micromamba env list | grep -q "ros_env"; then
+            if micromamba env list -r "/opt/micromamba" | grep -q "ros_env"; then
               ros-install -q
 
               source "/opt/micromamba/envs/ros_env/setup.bash"
@@ -87,13 +87,21 @@
             export CMAKE_PREFIX_PATH=/opt/micromamba/envs/ros_env:$CMAKE_PREFIX_PATH
             export COLCON_DEFAULTS_FILE=${colconDefaults}
 
+            # opcional
             if [ ! -d "culling_games" ]; then
-             git clone https://github.com/rmnicola/culling_games.git
+              echo "cloning cg repo..."
+              git clone https://github.com/rmnicola/culling_games.git
             fi
 
             cd culling_games
-            colcon build &> /dev/null
+
+            if [ ! -d "build" ]; then
+              echo "running colcon build..."
+              colcon build &> /dev/null
+            fi
+
             source install/setup.bash
+
             cd ..
           '';
         };

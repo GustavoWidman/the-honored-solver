@@ -71,7 +71,7 @@ pub struct Logger;
 impl Logger {
     pub fn init(level: LevelFilter) {
         Builder::new()
-            .filter("kemono_pinger".into(), level)
+            .filter("solver".into(), level)
             .target(Target::Stdout)
             .format(formatter(CustomLevelTokens))
             .write_style(WriteStyle::Always)
