@@ -45,8 +45,8 @@ impl ROSInterface {
                         if let Err(e) = clone.sensor_tx.send(data.into()) {
                             if clone.sensor_tx.receiver_count() > 0 {
                                 log::warn!("failed to send sensor data: {}", e);
+                                break;
                             }
-                            break;
                         }
                     }
                     None => {
