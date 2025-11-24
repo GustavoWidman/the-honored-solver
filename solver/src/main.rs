@@ -220,7 +220,8 @@ fn print_result(result: &pathfinding::PathResult, _algorithm_name: &str) {
 }
 
 fn print_benchmark_summary(results: &[(&str, pathfinding::PathResult)]) {
-    info!("\nbenchmark results:");
+    info!("");
+    info!("benchmark results:");
     info!(
         "{:<30} {:>8}  {:>12}  {:>12}",
         "algorithm", "steps", "plan", "total"
@@ -234,8 +235,9 @@ fn print_benchmark_summary(results: &[(&str, pathfinding::PathResult)]) {
         );
     }
 
+    info!("");
     if let Some((name, result)) = results.iter().min_by_key(|(_, r)| r.steps) {
-        info!("\nbest: {} ({} steps)", name, result.steps);
+        info!("best: {} ({} steps)", name, result.steps);
     }
 
     if let Some((name, result)) = results.iter().min_by_key(|(_, r)| r.total_time) {
