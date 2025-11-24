@@ -49,7 +49,7 @@ impl<E: ExplorationAlgorithm> BlindSolver<E> {
         let mut steps = 0;
 
         let total_start = Instant::now();
-        let planning_start = Instant::now();
+        let mut total_planning_time = Duration::default();
 
         loop {
             let sensors = if let Some(cached_sensors) = sensor_cache.get(&current_pos) {
@@ -80,9 +80,11 @@ impl<E: ExplorationAlgorithm> BlindSolver<E> {
                 }
             }
 
+            let planning_start = Instant::now();
             let next_move =
                 self.algorithm
                     .next_move(current_pos, &sensors, &maze, target_found, target_pos)?;
+            total_planning_time += planning_start.elapsed();
 
             if next_move.is_none() {
                 log::info!("reached target");
@@ -119,10 +121,10 @@ impl<E: ExplorationAlgorithm> BlindSolver<E> {
             }
         }
 
-        let planning_time = planning_start.elapsed();
-        let execution_time = total_start.elapsed();
+        let total_time = total_start.elapsed();
+        let execution_time = total_time - total_planning_time;
 
-        Ok(PathResult::new(steps, planning_time, execution_time))
+        Ok(PathResult::new(steps, total_planning_time, execution_time))
     }
 
     fn detect_target_in_sensors(
