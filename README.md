@@ -271,7 +271,9 @@ options:
 
 ```bash
 # solve with specific map
-./target/release/solver --map-name "test" omniscient astar # uses culling_games/src/cg/maps/test.csv, specifying "test.csv" seems to work for that same file as well...
+# uses culling_games/src/cg/maps/test.csv, although
+# specifying "test.csv" seems to work for that same file as well...
+./target/release/solver --map-name "test" omniscient astar
 
 # generate random maze and explore blindly
 ./target/release/solver -g blind wall-follower astar
