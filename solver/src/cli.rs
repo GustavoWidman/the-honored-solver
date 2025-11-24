@@ -36,9 +36,13 @@ pub enum Command {
 
     /// Blind mode: Explore using only sensors (no map knowledge)
     Blind {
-        /// Exploration algorithm to use
+        /// Exploration algorithm to use for discovery
         #[arg(value_enum)]
-        algorithm: ExplorationAlgorithm,
+        exploration: ExplorationAlgorithm,
+
+        /// Pathfinding algorithm to use for optimal route
+        #[arg(value_enum)]
+        pathfinding: PathfindingAlgorithm,
     },
 
     /// Benchmark mode: Run all algorithms and compare performance

@@ -69,6 +69,26 @@ impl UnboundedMaze {
             .collect()
     }
 
+    pub fn get_bounds(&self) -> Option<(isize, isize, isize, isize)> {
+        if self.cells.is_empty() {
+            return None;
+        }
+
+        let mut min_row = isize::MAX;
+        let mut max_row = isize::MIN;
+        let mut min_col = isize::MAX;
+        let mut max_col = isize::MIN;
+
+        for pos in self.cells.keys() {
+            min_row = min_row.min(pos.row);
+            max_row = max_row.max(pos.row);
+            min_col = min_col.min(pos.col);
+            max_col = max_col.max(pos.col);
+        }
+
+        Some((min_row, max_row, min_col, max_col))
+    }
+
     pub fn update_from_sensors(&mut self, pos: UnboundedPosition, sensors: &SensorsStates) {
         self.set(pos, Cell::Robot);
         let sensor_data = [

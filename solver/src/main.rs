@@ -42,8 +42,11 @@ async fn main() -> Result<()> {
         CliCommand::Omniscient { algorithm } => {
             run_omniscient_solver(ros, algorithm, args.delay).await?;
         }
-        CliCommand::Blind { algorithm } => {
-            run_blind_solver(ros, algorithm, args.delay).await?;
+        CliCommand::Blind {
+            exploration,
+            pathfinding,
+        } => {
+            run_blind_solver(ros, exploration, pathfinding, args.delay).await?;
         }
         CliCommand::Benchmark { mode } => match mode {
             BenchmarkMode::Omniscient => {
@@ -133,7 +136,7 @@ async fn run_omniscient_benchmark(ros: std::sync::Arc<ROSInterface>, delay: u64)
         match solve_omniscient(ros.clone(), algorithm, delay).await {
             Ok(result) => {
                 print_result(&result, algorithm.name());
-                completed_results.push((algorithm.name(), result));
+                completed_results.push((algorithm.name().to_string(), result));
             }
             Err(e) => {
                 log::error!("{} failed: {}", algorithm.name(), e);
@@ -149,16 +152,51 @@ async fn run_omniscient_benchmark(ros: std::sync::Arc<ROSInterface>, delay: u64)
 
 async fn solve_blind(
     ros: std::sync::Arc<ROSInterface>,
-    algorithm: ExplorationAlgorithm,
+    exploration: ExplorationAlgorithm,
+    pathfinding: PathfindingAlgorithm,
     delay: u64,
 ) -> Result<pathfinding::PathResult> {
-    match algorithm {
-        ExplorationAlgorithm::WallFollower => {
-            let mut solver = BlindSolver::new(exploration::WallFollower::new(), delay);
+    match (exploration, pathfinding) {
+        (ExplorationAlgorithm::WallFollower, PathfindingAlgorithm::AStar) => {
+            let mut solver =
+                BlindSolver::new(exploration::WallFollower::new(), pathfinding::AStar, delay);
             solver.solve(ros).await
         }
-        ExplorationAlgorithm::RecursiveBacktracker => {
-            let mut solver = BlindSolver::new(exploration::RecursiveBacktracker::new(), delay);
+        (ExplorationAlgorithm::WallFollower, PathfindingAlgorithm::Dijkstra) => {
+            let mut solver = BlindSolver::new(
+                exploration::WallFollower::new(),
+                pathfinding::Dijkstra,
+                delay,
+            );
+            solver.solve(ros).await
+        }
+        (ExplorationAlgorithm::WallFollower, PathfindingAlgorithm::DFS) => {
+            let mut solver =
+                BlindSolver::new(exploration::WallFollower::new(), pathfinding::DFS, delay);
+            solver.solve(ros).await
+        }
+        (ExplorationAlgorithm::RecursiveBacktracker, PathfindingAlgorithm::AStar) => {
+            let mut solver = BlindSolver::new(
+                exploration::RecursiveBacktracker::new(),
+                pathfinding::AStar,
+                delay,
+            );
+            solver.solve(ros).await
+        }
+        (ExplorationAlgorithm::RecursiveBacktracker, PathfindingAlgorithm::Dijkstra) => {
+            let mut solver = BlindSolver::new(
+                exploration::RecursiveBacktracker::new(),
+                pathfinding::Dijkstra,
+                delay,
+            );
+            solver.solve(ros).await
+        }
+        (ExplorationAlgorithm::RecursiveBacktracker, PathfindingAlgorithm::DFS) => {
+            let mut solver = BlindSolver::new(
+                exploration::RecursiveBacktracker::new(),
+                pathfinding::DFS,
+                delay,
+            );
             solver.solve(ros).await
         }
     }
@@ -166,16 +204,22 @@ async fn solve_blind(
 
 async fn run_blind_solver(
     ros: std::sync::Arc<ROSInterface>,
-    algorithm: ExplorationAlgorithm,
+    exploration: ExplorationAlgorithm,
+    pathfinding: PathfindingAlgorithm,
     delay: u64,
 ) -> Result<()> {
-    info!("exploring with {}", algorithm.name());
+    info!(
+        "exploring with {} + {}",
+        exploration.name(),
+        pathfinding.name()
+    );
     if delay > 0 {
         debug!("delay: {}ms", delay);
     }
 
-    let result = solve_blind(ros, algorithm, delay).await?;
-    print_result(&result, algorithm.name());
+    let result = solve_blind(ros, exploration, pathfinding, delay).await?;
+    let name = format!("{} + {}", exploration.name(), pathfinding.name());
+    print_result(&result, &name);
     Ok(())
 }
 
@@ -183,24 +227,30 @@ async fn run_blind_benchmark(ros: std::sync::Arc<ROSInterface>, delay: u64) -> R
     info!("benchmarking blind algorithms");
 
     let mut completed_results = Vec::new();
+    let mut test_num = 0;
 
-    for (i, algorithm) in ExplorationAlgorithm::all().enumerate() {
-        info!("testing {}", algorithm.name());
+    for exploration in ExplorationAlgorithm::all() {
+        for pathfinding in PathfindingAlgorithm::all() {
+            let name = format!("{} + {}", exploration.name(), pathfinding.name());
+            info!("testing {}", name);
 
-        if i > 0 {
-            debug!("resetting maze");
-            ros.reset(false, String::new()).await?;
-            tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-        }
-
-        match solve_blind(ros.clone(), algorithm, delay).await {
-            Ok(result) => {
-                print_result(&result, algorithm.name());
-                completed_results.push((algorithm.name(), result));
+            if test_num > 0 {
+                debug!("resetting maze");
+                ros.reset(false, String::new()).await?;
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
             }
-            Err(e) => {
-                log::error!("{} failed: {}", algorithm.name(), e);
+
+            match solve_blind(ros.clone(), exploration, pathfinding, delay).await {
+                Ok(result) => {
+                    print_result(&result, &name);
+                    completed_results.push((name, result));
+                }
+                Err(e) => {
+                    log::error!("{} failed: {}", name, e);
+                }
             }
+
+            test_num += 1;
         }
     }
 
@@ -219,18 +269,18 @@ fn print_result(result: &pathfinding::PathResult, _algorithm_name: &str) {
     debug!("execution: {:?}", result.execution_time);
 }
 
-fn print_benchmark_summary(results: &[(&str, pathfinding::PathResult)]) {
+fn print_benchmark_summary(results: &[(String, pathfinding::PathResult)]) {
     info!("");
     info!("benchmark results:");
     info!(
-        "{:<30} {:>8}  {:>12}  {:>12}",
+        "{:<50} {:>8}  {:>12}  {:>12}",
         "algorithm", "steps", "plan", "total"
     );
-    info!("{:-<70}", "");
+    info!("{:-<90}", "");
 
     for (name, result) in results {
         info!(
-            "{:<30} {:>8}  {:>12?}  {:>12?}",
+            "{:<50} {:>8}  {:>12?}  {:>12?}",
             name, result.steps, result.planning_time, result.total_time,
         );
     }

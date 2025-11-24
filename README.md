@@ -24,16 +24,26 @@ the maze is represented as a bounded grid where:
 
 ### blind solvers
 
-blind solvers never call `/get_map`. instead, they:
+blind solvers never call `/get_map`. instead, they operate in two distinct phases:
+
+**phase 1: exploration**
 1. subscribe to the `/culling_games/robot_sensors` topic to receive 8-directional sensor data
 2. use an unbounded coordinate system (signed integers) that grows infinitely as new areas are explored
 3. build a sparse hashmap-based representation of discovered cells
-4. apply exploration strategies to navigate toward the target
+4. apply exploration strategies to navigate until the target is spotted
+
+**phase 2: optimal execution**
+1. convert the discovered unbounded maze to a bounded representation
+2. use a pathfinding algorithm to compute the optimal path to the target
+3. reset the maze environment and robot position
+4. execute the optimal path
 
 the sensors detect:
 - `blocked`: wall or obstacle
 - `free`: empty walkable space
 - `target`: goal position
+
+this two-phase approach allows blind solvers to benefit from both exploration strategies (for discovery) and pathfinding algorithms (for optimal execution), resulting in more efficient solutions than pure exploration alone.
 
 ## algorithms
 
@@ -47,19 +57,26 @@ these algorithms work on a complete known map:
 | **dijkstra** | uniform cost search | optimal path, explores more nodes |
 | **dfs** | depth-first search | finds a path, not necessarily optimal |
 
-### exploration (blind)
+### blind mode (exploration + pathfinding)
 
-these algorithms discover the maze through sensor-based navigation:
+blind solvers combine an **exploration algorithm** (phase 1) with a **pathfinding algorithm** (phase 2):
+
+**exploration algorithms** discover the maze through sensor-based navigation:
 
 | algorithm | description | characteristics |
 |-----------|-------------|-----------------|
 | **wall follower** | left-hand rule maze traversal | keeps left hand on wall, guaranteed to find exit in simply-connected mazes |
 | **recursive backtracker** | dfs-based exploration with explicit backtracking | explores all unvisited neighbors, backtracks using bfs when stuck |
 
-both exploration algorithms:
+all exploration algorithms:
 - detect when the target appears in sensor range
-- attempt to move directly toward the target once spotted (if in cardinal direction)
-- continue exploring if the target is not yet visible
+- stop exploring once the target is spotted
+
+**pathfinding algorithms** compute the optimal path on the discovered map:
+
+after exploration completes, the same pathfinding algorithms from omniscient mode (a*, dijkstra, dfs) are used to find the optimal route through the discovered maze. the solver then resets and executes this optimal path.
+
+this combination means blind solvers test all permutations: 2 exploration algorithms × 3 pathfinding algorithms = 6 total combinations.
 
 ## project structure
 
@@ -195,33 +212,49 @@ solve a maze with complete map knowledge:
 
 ### blind mode
 
-explore a maze using only sensors:
+explore a maze using only sensors, combining an exploration algorithm with a pathfinding algorithm:
 
 ```bash
-# using wall follower
-./target/release/solver blind wall-follower
+# syntax: blind <exploration> <pathfinding>
 
-# using recursive backtracker
-./target/release/solver blind recursive-backtracker
+# wall follower exploration + a* pathfinding
+./target/release/solver blind wall-follower astar
+
+# recursive backtracker exploration + dijkstra pathfinding
+./target/release/solver blind recursive-backtracker dijkstra
+
+# wall follower exploration + dfs pathfinding
+./target/release/solver blind wall-follower dfs
 ```
+
+available exploration algorithms:
+- `wall-follower` - left-hand rule maze traversal
+- `recursive-backtracker` - dfs-based exploration with backtracking
+
+available pathfinding algorithms:
+- `astar` (or `a-star`) - manhattan distance heuristic
+- `dijkstra` - uniform cost search
+- `dfs` - depth-first search
 
 ### benchmark mode
 
 run all algorithms in a category and compare results:
 
 ```bash
-# benchmark all omniscient algorithms
+# benchmark all omniscient algorithms (3 algorithms)
 ./target/release/solver benchmark omniscient
 
-# benchmark all blind algorithms
+# benchmark all blind algorithms (6 combinations)
 ./target/release/solver benchmark blind
 ```
 
 benchmark output includes:
-- number of steps taken
-- planning time (computation)
-- total execution time
-- comparison showing best and fastest algorithms
+- number of steps taken (exploration + execution for blind mode)
+- planning time (computation only)
+- total execution time (including robot movements)
+- comparison showing best (fewest steps) and fastest (shortest time) algorithms
+
+**note:** blind mode benchmarks test all 6 combinations of exploration + pathfinding algorithms (wall follower + a*, wall follower + dijkstra, etc.)
 
 ### options
 
@@ -241,13 +274,13 @@ options:
 ./target/release/solver --map-name "test" omniscient astar # uses culling_games/src/cg/maps/test.csv, specifying "test.csv" seems to work for that same file as well...
 
 # generate random maze and explore blindly
-./target/release/solver -g blind wall-follower
+./target/release/solver -g blind wall-follower astar
 
 # benchmark with 100ms delay between moves (for visualization)
 ./target/release/solver -d 100 benchmark blind
 
 # enable debug logging
-./target/release/solver -v debug blind recursive-backtracker
+./target/release/solver -v debug blind recursive-backtracker dijkstra
 ```
 
 ## logging
@@ -257,7 +290,7 @@ the solver uses a custom colored logger with two main levels:
 - **info**: minimal output showing key events (target found, completion, results)
 - **debug**: verbose output including every move, backtracking, sensor data
 
-example info output:
+example omniscient info output:
 ```
 2024-11-24 15:32:10.123456 INFO  loading map: maze01
 2025-11-24 04:17:03.381527 INFO  throughout heaven and earth, i alone am the honored solver.
@@ -267,12 +300,31 @@ example info output:
 2024-11-24 15:32:11.567890 INFO  finished in 42 steps (1.2s)
 ```
 
-example debug output adds:
+example blind info output:
+```
+2024-11-24 15:32:10.123456 INFO  loading map: maze01
+2025-11-24 04:17:03.381527 INFO  throughout heaven and earth, i alone am the honored solver.
+2024-11-24 15:32:10.234567 INFO  exploring with Wall Follower + A*
+2024-11-24 15:32:10.345678 INFO  starting at origin
+2024-11-24 15:32:10.456789 INFO  phase 1: exploring maze with Wall Follower (Left-Hand Rule)
+2024-11-24 15:32:20.123456 INFO  target spotted at (13, 13)
+2024-11-24 15:32:20.234567 INFO  exploration complete: found target at (13, 13) in 120 steps
+2024-11-24 15:32:20.345678 INFO  phase 2: planning optimal path with A*
+2024-11-24 15:32:20.456789 INFO  planned optimal path: 102 steps
+2024-11-24 15:32:20.567890 INFO  resetting maze and executing optimal path
+2024-11-24 15:32:21.678901 INFO  reached target
+2024-11-24 15:32:21.789012 INFO  total: 120 exploration + 102 execution = 222 steps
+2024-11-24 15:32:21.890123 INFO  finished in 222 steps (11.5s)
+```
+
+example debug output adds move-by-move details:
 ```
 2024-11-24 15:32:10.123456 DEBUG fetching maze map
 2024-11-24 15:32:10.234567 DEBUG 29x29 maze: (0, 0) → (28, 28)
 2024-11-24 15:32:10.345678 DEBUG step 1/42: Up
-2024-11-24 15:32:10.456789 DEBUG step 2/42: Right
+2024-11-24 15:32:10.456789 DEBUG exploration step 1: Down from (0, 0)
+2024-11-24 15:32:10.567890 DEBUG cache hit! using cached sensors for (5, 3)
+2024-11-24 15:32:10.678901 DEBUG backtracking to (4, 3)
 ...
 ```
 
