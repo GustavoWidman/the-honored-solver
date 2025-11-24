@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -7,6 +8,7 @@ use crate::{
 };
 
 use crate::algorithms::{exploration::ExplorationAlgorithm, pathfinding::PathResult};
+use crate::ros::types::SensorsStates;
 
 /// explores maze using only sensor data with unbounded coordinates
 pub struct BlindSolver<E: ExplorationAlgorithm> {
@@ -39,6 +41,9 @@ impl<E: ExplorationAlgorithm> BlindSolver<E> {
 
         log::info!("starting at origin");
 
+        let mut sensor_cache: HashMap<UnboundedPosition, SensorsStates> = HashMap::new();
+        sensor_cache.insert(current_pos, initial_sensors.clone());
+
         let mut target_found = false;
         let mut target_pos: Option<UnboundedPosition> = None;
         let mut steps = 0;
@@ -47,7 +52,23 @@ impl<E: ExplorationAlgorithm> BlindSolver<E> {
         let planning_start = Instant::now();
 
         loop {
-            let sensors = sensor_rx.recv().await?;
+            let sensors = if let Some(cached_sensors) = sensor_cache.get(&current_pos) {
+                log::debug!(
+                    "cache hit! using cached sensors for ({}, {})",
+                    current_pos.row,
+                    current_pos.col
+                );
+                cached_sensors.clone()
+            } else {
+                let fresh_sensors = sensor_rx.recv().await?;
+                log::trace!(
+                    "fresh sensors for ({}, {})",
+                    current_pos.row,
+                    current_pos.col
+                );
+                sensor_cache.insert(current_pos, fresh_sensors.clone());
+                fresh_sensors
+            };
             maze.update_from_sensors(current_pos, &sensors);
 
             if !target_found {
