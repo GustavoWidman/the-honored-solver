@@ -222,14 +222,14 @@ fn print_result(result: &pathfinding::PathResult, _algorithm_name: &str) {
 fn print_benchmark_summary(results: &[(&str, pathfinding::PathResult)]) {
     info!("\nbenchmark results:");
     info!(
-        "{:<20} {:>8}  {:>12}  {:>12}",
+        "{:<30} {:>8}  {:>12}  {:>12}",
         "algorithm", "steps", "plan", "total"
     );
-    info!("{:-<60}", "");
+    info!("{:-<70}", "");
 
     for (name, result) in results {
         info!(
-            "{:<20} {:>8}  {:>12?}  {:>12?}",
+            "{:<30} {:>8}  {:>12?}  {:>12?}",
             name, result.steps, result.planning_time, result.total_time,
         );
     }
