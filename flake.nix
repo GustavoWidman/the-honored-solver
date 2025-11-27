@@ -1,110 +1,80 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/25.05";
-    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    flake-parts.url = "github:hercules-ci/flake-parts";
+    systems.url = "github:nix-systems/default";
+    devshell.url = "github:numtide/devshell";
   };
+
   outputs =
-    {
-      flake-utils,
-      nixpkgs,
+    inputs@{
+      flake-parts,
+      systems,
+      devshell,
       ...
     }:
-    flake-utils.lib.eachDefaultSystem (
-      system:
-      let
-        pkgs = import nixpkgs {
-          inherit system;
-        };
-
-        colconDefaults = pkgs.writeText "defaults.yaml" ''
-          build:
-            cmake-args:
-              - -DPython_EXECUTABLE=/opt/micromamba/envs/ros_env/bin/python
-              - -DPython3_EXECUTABLE=/opt/micromamba/envs/ros_env/bin/python
-              - -DPYTHON_EXECUTABLE=/opt/micromamba/envs/ros_env/bin/python
-              - -DPython3_FIND_STRATEGY=LOCATION
-              - -DPython_FIND_STRATEGY=LOCATION
-        '';
-      in
-      {
-        devShells.default = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            micromamba
-            cmake
-            pkg-config
-            ninja
-            gnumake
-
-            (pkgs.writeShellScriptBin "ros-install" ''
-              #!/usr/bin/env bash
-              micromamba install -y -r "/opt/micromamba" -n ros_env -c conda-forge -c \
-                robostack-humble \
-                ros-humble-desktop \
-                colcon-common-extensions \
-                catkin_tools \
-                rosdep \
-                ros-humble-turtlebot3 \
-                ros-humble-turtlebot3-gazebo \
-                ros-humble-turtlebot3-teleop \
-                ros-humble-example-interfaces \
-                ros-humble-turtlesim \
-                ros-humble-rosidl-default-generators \
-                ros-humble-rosidl-adapter \
-                ros-humble-rosidl-typesupport-c \
-                ros-humble-rosidl-typesupport-cpp \
-                ros-humble-rosidl-typesupport-interface \
-                ros-humble-rosidl-typesupport-introspection-c \
-                ros-humble-rosidl-typesupport-introspection-cpp \
-                pygame \
-                $@
-            '')
-
-            (pkgs.writeShellScriptBin "ros-update" ''
-              #!/usr/bin/env bash
-              micromamba update -y --all -r "/opt/micromamba" -n ros_env
-            '')
-          ];
-
-          shellHook = ''
-            #!/usr/bin/env bash
-            if [ ! -d "/opt/micromamba" ]; then
-                sudo mkdir -p /opt/micromamba
-                sudo chown $USER /opt/micromamba
-            fi
-
-            if micromamba env list -r "/opt/micromamba" | grep -q "ros_env"; then
-              ros-install -q
-
-              source "/opt/micromamba/envs/ros_env/setup.bash"
-            else
-              micromamba create -y -r "/opt/micromamba" -n ros_env -q
-              ros-install
-
-              source "/opt/micromamba/envs/ros_env/setup.bash"
-            fi
-
-            export DYLD_FALLBACK_LIBRARY_PATH="/opt/micromamba/envs/ros_env/lib:$DYLD_FALLBACK_LIBRARY_PATH"
-            export CMAKE_PREFIX_PATH=/opt/micromamba/envs/ros_env:$CMAKE_PREFIX_PATH
-            export COLCON_DEFAULTS_FILE=${colconDefaults}
-
-            # opcional
-            if [ ! -d "culling_games" ]; then
-              echo "cloning cg repo..."
-              git clone https://github.com/rmnicola/culling_games.git
-            fi
-
-            cd culling_games
-
-            if [ ! -d "build" ]; then
-              echo "running colcon build..."
-              colcon build &> /dev/null
-            fi
-
-            source install/setup.bash
-
-            cd ..
+    flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = import systems;
+      imports = [
+        devshell.flakeModule
+      ];
+      perSystem =
+        { pkgs, ... }:
+        let
+          colconDefaults = pkgs.writeText "defaults.yaml" ''
+            build:
+              cmake-args:
+                - -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+                - -DPython_FIND_VIRTUALENV=ONLY
+                - -DPython3_FIND_VIRTUALENV=ONLY
           '';
+        in
+        {
+          devshells.default = {
+            env = [
+              {
+                name = "COLCON_DEFAULTS_FILE";
+                value = builtins.toString colconDefaults;
+              }
+            ];
+            devshell = {
+              packages = with pkgs; [
+                pixi
+              ];
+              startup = {
+                activate-ros.text = ''
+                  if [ -f pixi.toml ]; then
+                    export DYLD_FALLBACK_LIBRARY_PATH="$PWD/.pixi/envs/default/lib:$DYLD_FALLBACK_LIBRARY_PATH"
+                    eval "$(pixi shell-hook)";
+                  fi
+                '';
+                clone-culling-games = {
+                  text = ''
+                    if [ ! -d "culling_games" ]; then
+                      echo "cloning cg repo..."
+                      git clone https://github.com/rmnicola/culling_games.git
+                    fi
+                  '';
+                };
+                build-and-source-culling-games = {
+                  text = ''
+                    cd culling_games
+
+                    if [ ! -d "build" ]; then
+                      echo "running colcon build..."
+                      colcon build &> /dev/null
+                    fi
+
+                    source install/setup.bash
+
+                    cd ..
+                  '';
+                  deps = [ "clone-culling-games" ];
+                };
+              };
+              motd = "";
+            };
+          };
         };
-      }
-    );
+    };
 }
