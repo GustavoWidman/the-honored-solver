@@ -348,7 +348,7 @@ example debug output adds move-by-move details:
 
 ## demonstration
 
-<!-- video/explanation section - to be filled in later -->
+https://github.com/user-attachments/assets/7b057301-a6c0-48e8-931a-c20a72b59605
 
 ## license
 
