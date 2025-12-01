@@ -7,6 +7,7 @@ use crate::{
 
 use super::traits::PathfindingAlgorithm;
 
+#[allow(clippy::upper_case_acronyms)]
 pub struct DFS;
 
 impl PathfindingAlgorithm for DFS {

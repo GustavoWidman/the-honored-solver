@@ -155,11 +155,11 @@ impl<E: ExplorationAlgorithm, P: PathfindingAlgorithm> BlindSolver<E, P> {
             maze.update_from_sensors(*current_pos, &sensors);
 
             // detect target but don't stop exploring
-            if target_pos.is_none() {
-                if let Some(pos) = Self::detect_target_in_sensors(*current_pos, &sensors) {
-                    log::info!("target spotted at ({}, {})", pos.row, pos.col);
-                    target_pos = Some(pos);
-                }
+            if target_pos.is_none()
+                && let Some(pos) = Self::detect_target_in_sensors(*current_pos, &sensors)
+            {
+                log::info!("target spotted at ({}, {})", pos.row, pos.col);
+                target_pos = Some(pos);
             }
 
             let planning_start = Instant::now();

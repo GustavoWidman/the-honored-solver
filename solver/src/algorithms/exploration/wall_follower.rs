@@ -89,14 +89,15 @@ impl ExplorationAlgorithm for WallFollower {
             return Ok(None);
         }
 
-        if let Some(start) = self.start_pos {
-            if current_pos == start && self.visited.len() > 1 {
-                self.returned_to_start = true;
-                log::debug!(
-                    "wall follower returned to start after visiting {} positions",
-                    self.visited.len()
-                );
-            }
+        if let Some(start) = self.start_pos
+            && current_pos == start
+            && self.visited.len() > 1
+        {
+            self.returned_to_start = true;
+            log::debug!(
+                "wall follower returned to start after visiting {} positions",
+                self.visited.len()
+            );
         }
 
         if self.first_move {

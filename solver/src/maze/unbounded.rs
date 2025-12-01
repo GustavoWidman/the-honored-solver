@@ -57,10 +57,7 @@ impl UnboundedMaze {
     }
 
     pub fn is_walkable(&self, pos: UnboundedPosition) -> bool {
-        match self.get(pos) {
-            Cell::Free | Cell::Target | Cell::Robot => true,
-            _ => false,
-        }
+        matches!(self.get(pos), Cell::Free | Cell::Target | Cell::Robot)
     }
 
     pub fn neighbors(&self, pos: UnboundedPosition) -> Vec<(UnboundedPosition, MoveDirection)> {

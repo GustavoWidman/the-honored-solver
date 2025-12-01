@@ -73,6 +73,7 @@ pub enum PathfindingAlgorithm {
 
     /// Depth-First Search
     #[value(name = "dfs")]
+    #[allow(clippy::upper_case_acronyms)]
     DFS,
 }
 
