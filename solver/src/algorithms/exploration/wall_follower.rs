@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::{
     maze::{UnboundedMaze, UnboundedPosition},
     ros::types::{MoveDirection, SensorsStates},
@@ -9,6 +11,9 @@ use super::traits::ExplorationAlgorithm;
 pub struct WallFollower {
     facing: MoveDirection,
     first_move: bool,
+    visited: HashSet<UnboundedPosition>,
+    start_pos: Option<UnboundedPosition>,
+    returned_to_start: bool,
 }
 
 impl WallFollower {
@@ -16,6 +21,9 @@ impl WallFollower {
         Self {
             facing: MoveDirection::Up,
             first_move: true,
+            visited: HashSet::new(),
+            start_pos: None,
+            returned_to_start: false,
         }
     }
 
@@ -56,25 +64,8 @@ impl WallFollower {
             MoveDirection::Right => &sensors.right,
         };
 
-        !matches!(sensor_state, SensorState::Blocked)
-    }
-
-    /// assumes target is adjacent in cardinal direction
-    fn direction_to_target(
-        &self,
-        current: UnboundedPosition,
-        target: UnboundedPosition,
-    ) -> eyre::Result<MoveDirection> {
-        let dr = target.row - current.row;
-        let dc = target.col - current.col;
-
-        match (dr, dc) {
-            (-1, 0) => Ok(MoveDirection::Up),
-            (1, 0) => Ok(MoveDirection::Down),
-            (0, -1) => Ok(MoveDirection::Left),
-            (0, 1) => Ok(MoveDirection::Right),
-            _ => eyre::bail!("Target is not adjacent in a cardinal direction"),
-        }
+        // treat target as blocked during exploration - we don't want to reach it yet
+        matches!(sensor_state, SensorState::Free)
     }
 }
 
@@ -84,21 +75,27 @@ impl ExplorationAlgorithm for WallFollower {
         current_pos: UnboundedPosition,
         sensors: &SensorsStates,
         _maze: &UnboundedMaze,
-        target_found: bool,
-        target_pos: Option<UnboundedPosition>,
     ) -> eyre::Result<Option<MoveDirection>> {
-        if target_found {
-            if let Some(target) = target_pos {
-                if current_pos == target {
-                    return Ok(None);
-                }
+        // track starting position
+        if self.start_pos.is_none() {
+            self.start_pos = Some(current_pos);
+        }
 
-                if let Ok(direction) = self.direction_to_target(current_pos, target) {
-                    if self.can_move(direction, sensors) {
-                        self.facing = direction;
-                        return Ok(Some(direction));
-                    }
-                }
+        // mark current position as visited
+        self.visited.insert(current_pos);
+
+        // if we've returned to start after visiting other positions, exploration is complete
+        if self.returned_to_start {
+            return Ok(None);
+        }
+
+        if let Some(start) = self.start_pos {
+            if current_pos == start && self.visited.len() > 1 {
+                self.returned_to_start = true;
+                log::debug!(
+                    "wall follower returned to start after visiting {} positions",
+                    self.visited.len()
+                );
             }
         }
 
@@ -146,5 +143,8 @@ impl ExplorationAlgorithm for WallFollower {
     fn reset(&mut self) {
         self.facing = MoveDirection::Up;
         self.first_move = true;
+        self.visited.clear();
+        self.start_pos = None;
+        self.returned_to_start = false;
     }
 }

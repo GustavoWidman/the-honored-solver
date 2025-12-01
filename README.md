@@ -24,26 +24,39 @@ the maze is represented as a bounded grid where:
 
 ### blind solvers
 
-blind solvers never call `/get_map`. instead, they operate in two distinct phases:
+blind solvers never call `/get_map`. instead, they operate in four distinct steps:
 
-**phase 1: exploration**
+**known constraints:**
+- map is always 29×29 with a 1-tile thick wall around the perimeter
+- robot always spawns at position (1, 1) in maze coordinates, mapped to (0, 0) in our unbounded coordinate system
+- target is always at the center of the maze
+
+**step 1: full maze exploration**
 1. subscribe to the `/culling_games/robot_sensors` topic to receive 8-directional sensor data
 2. use an unbounded coordinate system (signed integers) that grows infinitely as new areas are explored
 3. build a sparse hashmap-based representation of discovered cells
-4. apply exploration strategies to navigate until the target is spotted
+4. apply exploration strategies to **fully map the entire maze**
+5. exploration continues even after spotting the target, until the exploration algorithm completes
+6. robot **never reaches the target** during this phase
 
-**phase 2: optimal execution**
+**step 2: reset robot state**
+1. reset the robot position to origin without changing the discovered map
+2. the fully explored maze map is retained
+
+**step 3: optimal path planning**
 1. convert the discovered unbounded maze to a bounded representation
 2. use a pathfinding algorithm to compute the optimal path to the target
-3. reset the maze environment and robot position
-4. execute the optimal path
+
+**step 4: execute optimal path**
+1. execute the computed optimal path
+2. robot reaches the target
 
 the sensors detect:
 - `blocked`: wall or obstacle
 - `free`: empty walkable space
 - `target`: goal position
 
-this two-phase approach allows blind solvers to benefit from both exploration strategies (for discovery) and pathfinding algorithms (for optimal execution), resulting in more efficient solutions than pure exploration alone.
+this approach ensures complete maze knowledge before pathfinding, allowing for globally optimal solutions while still maintaining the "blind" constraint of not calling `/get_map`.
 
 ## algorithms
 
@@ -59,22 +72,24 @@ these algorithms work on a complete known map:
 
 ### blind mode (exploration + pathfinding)
 
-blind solvers combine an **exploration algorithm** (phase 1) with a **pathfinding algorithm** (phase 2):
+blind solvers combine an **exploration algorithm** (step 1) with a **pathfinding algorithm** (step 3):
 
-**exploration algorithms** discover the maze through sensor-based navigation:
+**exploration algorithms** fully map the maze through sensor-based navigation:
 
 | algorithm | description | characteristics |
 |-----------|-------------|-----------------|
-| **wall follower** | left-hand rule maze traversal | keeps left hand on wall, guaranteed to find exit in simply-connected mazes |
-| **recursive backtracker** | dfs-based exploration with explicit backtracking | explores all unvisited neighbors, backtracks using bfs when stuck |
+| **wall follower** | left-hand rule maze traversal | follows walls until returning to start, explores perimeter and accessible loops |
+| **recursive backtracker** | dfs-based exploration with explicit backtracking | systematically explores all reachable cells, backtracks using bfs when stuck |
 
 all exploration algorithms:
-- detect when the target appears in sensor range
-- stop exploring once the target is spotted
+- detect when the target appears in sensor range (for later pathfinding)
+- continue exploring after spotting the target
+- complete full maze exploration before stopping
+- never reach the target during exploration phase
 
-**pathfinding algorithms** compute the optimal path on the discovered map:
+**pathfinding algorithms** compute the optimal path on the fully discovered map:
 
-after exploration completes, the same pathfinding algorithms from omniscient mode (a*, dijkstra, dfs) are used to find the optimal route through the discovered maze. the solver then resets and executes this optimal path.
+after full exploration completes, the same pathfinding algorithms from omniscient mode (a*, dijkstra, dfs) are used to find the optimal route through the discovered maze. the solver then resets and executes this optimal path.
 
 this combination means blind solvers test all permutations: 2 exploration algorithms × 3 pathfinding algorithms = 6 total combinations.
 
@@ -309,14 +324,15 @@ example blind info output:
 2024-11-24 15:32:10.234567 INFO  exploring with Wall Follower + A*
 2024-11-24 15:32:10.345678 INFO  starting at origin
 2024-11-24 15:32:10.456789 INFO  phase 1: exploring maze with Wall Follower (Left-Hand Rule)
-2024-11-24 15:32:20.123456 INFO  target spotted at (13, 13)
-2024-11-24 15:32:20.234567 INFO  exploration complete: found target at (13, 13) in 120 steps
-2024-11-24 15:32:20.345678 INFO  phase 2: planning optimal path with A*
-2024-11-24 15:32:20.456789 INFO  planned optimal path: 102 steps
-2024-11-24 15:32:20.567890 INFO  resetting maze and executing optimal path
-2024-11-24 15:32:21.678901 INFO  reached target
-2024-11-24 15:32:21.789012 INFO  total: 120 exploration + 102 execution = 222 steps
-2024-11-24 15:32:21.890123 INFO  finished in 222 steps (11.5s)
+2024-11-24 15:32:15.123456 INFO  target spotted at (13, 13)
+2024-11-24 15:32:35.234567 INFO  exploration complete after 450 steps
+2024-11-24 15:32:35.345678 INFO  exploration complete: found target at (13, 13) in 450 steps
+2024-11-24 15:32:35.456789 INFO  phase 2: planning optimal path with A*
+2024-11-24 15:32:35.567890 INFO  planned optimal path: 26 steps
+2024-11-24 15:32:35.678901 INFO  resetting maze and executing optimal path
+2024-11-24 15:32:36.789012 INFO  reached target
+2024-11-24 15:32:36.890123 INFO  total: 450 exploration + 26 execution = 476 steps
+2024-11-24 15:32:36.901234 INFO  finished in 476 steps (26.5s)
 ```
 
 example debug output adds move-by-move details:

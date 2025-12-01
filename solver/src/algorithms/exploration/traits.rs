@@ -4,17 +4,14 @@ use crate::{
 };
 
 pub trait ExplorationAlgorithm {
-    /// returns None when target is reached
+    /// returns None when exploration is complete
     fn next_move(
         &mut self,
         current_pos: UnboundedPosition,
         sensors: &SensorsStates,
         maze: &UnboundedMaze,
-        target_found: bool,
-        target_pos: Option<UnboundedPosition>,
     ) -> eyre::Result<Option<MoveDirection>>;
 
-    #[allow(dead_code)]
     fn name(&self) -> &'static str;
 
     fn reset(&mut self);

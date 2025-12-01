@@ -24,8 +24,8 @@ impl ROSInterface {
         let get_map_client = create_client::<GetMap::Service>(node, "/get_map")?;
         let move_client = create_client::<MoveCmd::Service>(node, "/move_command")?;
         let reset_client = create_client::<Reset::Service>(node, "/reset")?;
-        let mut sensors_subscriber =
-            node.subscribe::<RobotSensors>("/culling_games/robot_sensors", QosProfile::default())?;
+        let mut sensors_subscriber = node
+            .subscribe::<RobotSensors>("/culling_games/robot_sensors", QosProfile::sensor_data())?;
 
         let (sensor_tx, _) = broadcast::channel(100);
 
@@ -42,11 +42,11 @@ impl ROSInterface {
             loop {
                 match sensors_subscriber.next().await {
                     Some(data) => {
-                        if let Err(e) = clone.sensor_tx.send(data.into()) {
-                            if clone.sensor_tx.receiver_count() > 0 {
-                                log::warn!("failed to send sensor data: {}", e);
-                                break;
-                            }
+                        if let Err(e) = clone.sensor_tx.send(data.into())
+                            && clone.sensor_tx.receiver_count() > 0
+                        {
+                            log::warn!("failed to send sensor data: {}", e);
+                            break;
                         }
                     }
                     None => {

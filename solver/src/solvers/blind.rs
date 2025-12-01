@@ -40,7 +40,7 @@ impl<E: ExplorationAlgorithm, P: PathfindingAlgorithm> BlindSolver<E, P> {
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
         // drain any stale sensor messages from before reset
-        while sensor_rx.len() > 0 {
+        while !sensor_rx.is_empty() {
             let _ = sensor_rx.recv().await;
         }
 
@@ -126,7 +126,7 @@ impl<E: ExplorationAlgorithm, P: PathfindingAlgorithm> BlindSolver<E, P> {
         current_pos: &mut UnboundedPosition,
         total_planning_time: &mut Duration,
     ) -> eyre::Result<(UnboundedPosition, usize)> {
-        let mut target_pos: Option<UnboundedPosition>;
+        let mut target_pos: Option<UnboundedPosition> = None;
         let mut steps = 0;
 
         loop {
@@ -138,6 +138,11 @@ impl<E: ExplorationAlgorithm, P: PathfindingAlgorithm> BlindSolver<E, P> {
                 );
                 cached_sensors.clone()
             } else {
+                // drain sensors
+                while !sensor_rx.is_empty() {
+                    let _ = sensor_rx.recv().await;
+                }
+
                 let fresh_sensors = sensor_rx.recv().await?;
                 log::trace!(
                     "fresh sensors for ({}, {})",
@@ -149,20 +154,21 @@ impl<E: ExplorationAlgorithm, P: PathfindingAlgorithm> BlindSolver<E, P> {
             };
             maze.update_from_sensors(*current_pos, &sensors);
 
-            target_pos = Self::detect_target_in_sensors(*current_pos, &sensors);
-            if let Some(pos) = target_pos {
-                log::info!("target spotted at ({}, {})", pos.row, pos.col);
-                return Ok((pos, steps));
+            // detect target but don't stop exploring
+            if target_pos.is_none() {
+                if let Some(pos) = Self::detect_target_in_sensors(*current_pos, &sensors) {
+                    log::info!("target spotted at ({}, {})", pos.row, pos.col);
+                    target_pos = Some(pos);
+                }
             }
 
             let planning_start = Instant::now();
-            let next_move =
-                self.exploration
-                    .next_move(*current_pos, &sensors, maze, false, target_pos)?;
+            let next_move = self.exploration.next_move(*current_pos, &sensors, maze)?;
             *total_planning_time += planning_start.elapsed();
 
             if next_move.is_none() {
-                eyre::bail!("exploration algorithm stopped before finding target");
+                log::info!("exploration complete after {} steps", steps);
+                break;
             }
 
             let direction = next_move.unwrap();
@@ -194,6 +200,10 @@ impl<E: ExplorationAlgorithm, P: PathfindingAlgorithm> BlindSolver<E, P> {
                 eyre::bail!("too many steps ({}) - possible infinite loop", steps);
             }
         }
+
+        target_pos
+            .ok_or_else(|| eyre::eyre!("exploration complete but target never spotted"))
+            .map(|pos| (pos, steps))
     }
 
     fn convert_to_bounded(
@@ -245,6 +255,14 @@ impl<E: ExplorationAlgorithm, P: PathfindingAlgorithm> BlindSolver<E, P> {
         path: &[MoveDirection],
     ) -> eyre::Result<usize> {
         let mut sensor_rx = ros.subscribe_sensors();
+
+        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+        // drain sensors
+        while !sensor_rx.is_empty() {
+            let _ = sensor_rx.recv().await;
+        }
+
         sensor_rx.recv().await?;
 
         for (i, direction) in path.iter().enumerate() {

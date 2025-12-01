@@ -115,7 +115,7 @@ async fn run_omniscient_solver(
     }
 
     let result = solve_omniscient(ros, algorithm, delay).await?;
-    print_result(&result, algorithm.name());
+    print_result(&result);
     Ok(())
 }
 
@@ -135,7 +135,7 @@ async fn run_omniscient_benchmark(ros: std::sync::Arc<ROSInterface>, delay: u64)
 
         match solve_omniscient(ros.clone(), algorithm, delay).await {
             Ok(result) => {
-                print_result(&result, algorithm.name());
+                print_result(&result);
                 completed_results.push((algorithm.name().to_string(), result));
             }
             Err(e) => {
@@ -218,8 +218,7 @@ async fn run_blind_solver(
     }
 
     let result = solve_blind(ros, exploration, pathfinding, delay).await?;
-    let name = format!("{} + {}", exploration.name(), pathfinding.name());
-    print_result(&result, &name);
+    print_result(&result);
     Ok(())
 }
 
@@ -242,7 +241,7 @@ async fn run_blind_benchmark(ros: std::sync::Arc<ROSInterface>, delay: u64) -> R
 
             match solve_blind(ros.clone(), exploration, pathfinding, delay).await {
                 Ok(result) => {
-                    print_result(&result, &name);
+                    print_result(&result);
                     completed_results.push((name, result));
                 }
                 Err(e) => {
@@ -260,7 +259,7 @@ async fn run_blind_benchmark(ros: std::sync::Arc<ROSInterface>, delay: u64) -> R
 
 // ========== Utilities ==========
 
-fn print_result(result: &pathfinding::PathResult, _algorithm_name: &str) {
+fn print_result(result: &pathfinding::PathResult) {
     info!(
         "finished in {} steps ({:?})",
         result.steps, result.total_time

@@ -53,7 +53,8 @@ impl RecursiveBacktracker {
         ];
 
         for (state, direction, row, col) in directions {
-            if !matches!(state, SensorState::Blocked) {
+            // treat target as blocked during exploration - we don't want to reach it yet
+            if matches!(state, SensorState::Free) {
                 let pos = UnboundedPosition::new(row, col);
                 if !self.visited.contains(&pos) {
                     unvisited.push((pos, direction));
@@ -111,21 +112,8 @@ impl ExplorationAlgorithm for RecursiveBacktracker {
         current_pos: UnboundedPosition,
         sensors: &SensorsStates,
         maze: &UnboundedMaze,
-        target_found: bool,
-        target_pos: Option<UnboundedPosition>,
     ) -> eyre::Result<Option<MoveDirection>> {
         self.visited.insert(current_pos);
-
-        if target_found {
-            if let Some(target) = target_pos {
-                if current_pos == target {
-                    return Ok(None);
-                }
-                if let Some(first_move) = self.find_path_bfs(maze, current_pos, target) {
-                    return Ok(Some(first_move));
-                }
-            }
-        }
 
         let unvisited_neighbors = self.get_unvisited_neighbors(current_pos, sensors);
 
@@ -147,7 +135,7 @@ impl ExplorationAlgorithm for RecursiveBacktracker {
             }
         }
 
-        eyre::bail!("No valid moves and no backtrack path - exploration complete or stuck")
+        Ok(None)
     }
 
     fn name(&self) -> &'static str {

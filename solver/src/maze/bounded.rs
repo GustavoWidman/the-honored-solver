@@ -55,7 +55,7 @@ impl Maze {
     }
 
     pub fn is_walkable(&self, pos: Position) -> bool {
-        self.get(pos).map_or(false, |cell| cell.is_walkable())
+        self.get(pos).is_some_and(|cell| cell.is_walkable())
     }
 
     pub fn find_robot(&self) -> Option<Position> {
