@@ -27,6 +27,8 @@
                 - -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
                 - -DPython_FIND_VIRTUALENV=ONLY
                 - -DPython3_FIND_VIRTUALENV=ONLY
+                - -Wno-dev
+                ${pkgs.lib.optionalString pkgs.stdenv.isDarwin "- -DCMAKE_BUILD_WITH_INSTALL_RPATH=ON"}
           '';
         in
         {
@@ -44,7 +46,9 @@
               startup = {
                 activate-ros.text = ''
                   if [ -f pixi.toml ]; then
-                    export DYLD_FALLBACK_LIBRARY_PATH="$PWD/.pixi/envs/default/lib:$DYLD_FALLBACK_LIBRARY_PATH"
+                    ${pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
+                      export DYLD_FALLBACK_LIBRARY_PATH="$PWD/.pixi/envs/default/lib:$DYLD_FALLBACK_LIBRARY_PATH"
+                    ''}
                     eval "$(pixi shell-hook)";
                   fi
                 '';
@@ -62,7 +66,7 @@
 
                     if [ ! -d "build" ]; then
                       echo "running colcon build..."
-                      colcon build &> /dev/null
+                      colcon build
                     fi
 
                     source install/setup.bash
